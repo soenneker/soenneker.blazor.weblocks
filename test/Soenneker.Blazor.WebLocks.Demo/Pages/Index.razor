@@ -1,0 +1,64 @@
+@page "/"
+@using System.Threading
+@using System.Threading.Tasks
+@using Soenneker.Atomics.ValueBools
+@using Soenneker.Blazor.WebLocks.Abstract
+@inject IWebLocks WebLocks
+@implements IAsyncDisposable
+
+<PageTitle>Web Locks demo</PageTitle>
+<h1>Web Locks</h1>
+<p>Open this page in two tabs. Acquire the lock in one tab, then wait or try in the other.</p>
+<p role="status">@_status</p>
+<button @onclick="Acquire" disabled="@(!_supported || _waiting || _lease is not null)">Acquire</button>
+<button @onclick="TryAcquire" disabled="@(!_supported || _waiting || _lease is not null)">Try acquire</button>
+<button @onclick="Cancel" disabled="@(!_waiting)">Cancel wait</button>
+<button @onclick="Release" disabled="@(_lease is null)">Release</button>
+
+@code {
+    private bool _supported;
+    private bool _waiting;
+    private string _status = "Checking browser support";
+    private IWebLockLease? _lease;
+    private CancellationTokenSource? _pending;
+    private ValueAtomicBool _disposed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _supported = await WebLocks.IsSupported();
+        _status = _supported ? "Ready" : "Web Locks is unavailable in this browser context.";
+        StateHasChanged();
+    }
+    private async Task Acquire()
+    {
+        _waiting = true;
+        _status = "Waiting for lock";
+        using var pending = new CancellationTokenSource();
+        _pending = pending;
+        try { _lease = await WebLocks.Acquire("soenneker-weblocks-demo", cancellationToken: pending.Token); _status = "Lock held"; }
+        catch (OperationCanceledException) { _status = "Wait canceled"; }
+        catch (Exception exception) { _status = exception.Message; }
+        finally { _pending = null; _waiting = false; }
+        if (_disposed.Value && _lease is not null) await _lease.DisposeAsync();
+    }
+    private async Task TryAcquire()
+    {
+        _lease = await WebLocks.TryAcquire("soenneker-weblocks-demo");
+        _status = _lease is null ? "Lock is held by another tab" : "Lock held";
+    }
+    private void Cancel() => _pending?.Cancel();
+    private async Task Release()
+    {
+        if (_lease is null) return;
+        await _lease.DisposeAsync();
+        _lease = null;
+        _status = "Released";
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (!_disposed.TrySetTrue()) return;
+        _pending?.Cancel();
+        if (_lease is not null) await _lease.DisposeAsync();
+    }
+}
