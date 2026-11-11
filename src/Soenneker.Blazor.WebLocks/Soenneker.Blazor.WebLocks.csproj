@@ -46,6 +46,6 @@
 
     <ItemGroup>
         <PackageReference Include="Soenneker.Atomics.ValueBools" Version="11.0.56" />
-        <PackageReference Include="Soenneker.Blazor.Utils.ModuleImport" Version="11.0.1943" />
+        <PackageReference Include="Soenneker.Blazor.Utils.ModuleImport" Version="11.0.1944" />
     </ItemGroup>
 </Project>
